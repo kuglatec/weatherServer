@@ -1,1 +1,469 @@
-hello world
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Data</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: #0d1117;
+            color: #e6edf3;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .header {
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #e6edf3;
+        }
+
+        .header p {
+            font-size: 14px;
+            color: #7d8590;
+        }
+
+        .controls {
+            margin-bottom: 24px;
+        }
+
+        button {
+            background: #238636;
+            color: #fff;
+            border: 1px solid rgba(240,246,252,0.1);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2ea043;
+        }
+
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .device-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+        }
+
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .device-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e6edf3;
+        }
+
+        .device-stats {
+            font-size: 12px;
+            color: #7d8590;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            margin-bottom: 16px;
+        }
+
+        .latest-reading {
+            display: flex;
+            gap: 16px;
+            padding: 12px;
+            background: #0d1117;
+            border-radius: 6px;
+        }
+
+        .reading-item {
+            flex: 1;
+        }
+
+        .reading-label {
+            font-size: 12px;
+            color: #7d8590;
+            margin-bottom: 4px;
+        }
+
+        .reading-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #e6edf3;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 32px;
+            color: #7d8590;
+            font-size: 14px;
+        }
+
+        .device-id {
+            font-size: 11px;
+            color: #7d8590;
+            margin-top: 4px;
+        }
+
+        .alias-input {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #e6edf3;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 8px;
+            width: 150px;
+        }
+
+        .device-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #30363d;
+        }
+
+        .btn-small {
+            background: #21262d;
+            color: #e6edf3;
+            border: 1px solid #30363d;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-small:hover {
+            background: #30363d;
+        }
+
+        .btn-danger {
+            background: #da3633;
+            border-color: #da3633;
+        }
+
+        .btn-danger:hover {
+            background: #b62324;
+        }
+
+        .btn-warning {
+            background: #bb8009;
+            border-color: #bb8009;
+        }
+
+        .btn-warning:hover {
+            background: #9a6700;
+        }
+
+        @media (max-width: 768px) {
+            .devices-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .device-actions {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Sensor Data</h1>
+            <p>Real-time sensor readings</p>
+        </div>
+
+        <div class="controls">
+            <button onclick="loadData()">Refresh</button>
+        </div>
+
+        <div id="devices-container">
+            <div class="loading">Loading data...</div>
+        </div>
+    </div>
+
+    <script>
+        const charts = {};
+
+        async function loadData() {
+            try {
+                const response = await fetch('/api/data');
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.getElementById('devices-container').innerHTML = '<div class="loading">No sensor data available</div>';
+                    return;
+                }
+
+                // Group data by device
+                const deviceData = {};
+                data.forEach(row => {
+                    if (!deviceData[row.device_id]) {
+                        deviceData[row.device_id] = [];
+                    }
+                    deviceData[row.device_id].push(row);
+                });
+
+                // Create grid HTML
+                let html = '<div class="devices-grid">';
+
+                for (const [deviceId, readings] of Object.entries(deviceData)) {
+                    const latest = readings[0];
+                    const chartId = `chart-${deviceId.replace(/[^a-zA-Z0-9]/g, '')}`;
+                    const alias = latest.alias || '';
+                    const displayName = alias || deviceId;
+
+                    html += `
+                        <div class="device-card">
+                            <div class="device-header">
+                                <div>
+                                    <div class="device-name">${displayName}</div>
+                                    <div class="device-id">ID: ${deviceId}</div>
+                                </div>
+                                <div class="device-stats">${readings.length} readings</div>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="${chartId}"></canvas>
+                            </div>
+                            <div class="latest-reading">
+                                <div class="reading-item">
+                                    <div class="reading-label">Temperature</div>
+                                    <div class="reading-value">${latest.temperature}°C</div>
+                                </div>
+                                <div class="reading-item">
+                                    <div class="reading-label">Humidity</div>
+                                    <div class="reading-value">${latest.humidity}%</div>
+                                </div>
+                                <div class="reading-item">
+                                    <div class="reading-label">Last Update</div>
+                                    <div class="reading-value" style="font-size: 14px;">${new Date(latest.timestamp).toLocaleTimeString()}</div>
+                                </div>
+                            </div>
+                            <div class="device-actions">
+                                <input type="text" class="alias-input" id="alias-${deviceId}" placeholder="Set alias..." value="${alias}">
+                                <button class="btn-small" onclick="setAlias('${deviceId}')">Set Alias</button>
+                                <button class="btn-small btn-warning" onclick="confirmClearReadings('${deviceId}')">Clear Readings</button>
+                                <button class="btn-small btn-danger" onclick="confirmDeleteDevice('${deviceId}')">Delete Device</button>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                document.getElementById('devices-container').innerHTML = html;
+
+                // Create charts
+                for (const [deviceId, readings] of Object.entries(deviceData)) {
+                    const chartId = `chart-${deviceId.replace(/[^a-zA-Z0-9]/g, '')}`;
+                    const ctx = document.getElementById(chartId);
+
+                    if (!ctx) continue;
+
+                    // Prepare data (reverse to show oldest to newest)
+                    const reversed = [...readings].reverse().slice(-20); // Last 20 readings
+                    const labels = reversed.map(r => new Date(r.timestamp).toLocaleTimeString());
+                    const temps = reversed.map(r => r.temperature);
+                    const humidity = reversed.map(r => r.humidity);
+
+                    // Destroy existing chart if it exists
+                    if (charts[chartId]) {
+                        charts[chartId].destroy();
+                    }
+
+                    // Create new chart
+                    charts[chartId] = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Temperature (°C)',
+                                    data: temps,
+                                    borderColor: '#f85149',
+                                    backgroundColor: 'rgba(248, 81, 73, 0.1)',
+                                    borderWidth: 2,
+                                    tension: 0.4,
+                                    fill: true,
+                                    yAxisID: 'y'
+                                },
+                                {
+                                    label: 'Humidity (%)',
+                                    data: humidity,
+                                    borderColor: '#58a6ff',
+                                    backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                                    borderWidth: 2,
+                                    tension: 0.4,
+                                    fill: true,
+                                    yAxisID: 'y1'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false
+                            },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: {
+                                        color: '#7d8590',
+                                        font: { size: 11 },
+                                        padding: 10
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    display: true,
+                                    grid: { color: '#30363d' },
+                                    ticks: {
+                                        color: '#7d8590',
+                                        maxRotation: 45,
+                                        minRotation: 45,
+                                        font: { size: 10 }
+                                    }
+                                },
+                                y: {
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'left',
+                                    grid: { color: '#30363d' },
+                                    ticks: { color: '#f85149' },
+                                    title: {
+                                        display: true,
+                                        text: '°C',
+                                        color: '#f85149'
+                                    }
+                                },
+                                y1: {
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'right',
+                                    grid: { drawOnChartArea: false },
+                                    ticks: { color: '#58a6ff' },
+                                    title: {
+                                        display: true,
+                                        text: '%',
+                                        color: '#58a6ff'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('devices-container').innerHTML = '<div class="loading">Error loading data</div>';
+            }
+        }
+
+        async function setAlias(deviceId) {
+            const aliasInput = document.getElementById(`alias-${deviceId}`);
+            const alias = aliasInput.value.trim();
+
+            try {
+                const response = await fetch('/api/set-alias', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: deviceId, alias: alias })
+                });
+
+                if (response.ok) {
+                    loadData();
+                } else {
+                    alert('Failed to set alias');
+                }
+            } catch (error) {
+                console.error('Error setting alias:', error);
+                alert('Error setting alias');
+            }
+        }
+
+        async function confirmClearReadings(deviceId) {
+            if (confirm(`Are you sure you want to clear all readings for ${deviceId}?\n\nThis will delete all historical data but keep the device alias.`)) {
+                try {
+                    const response = await fetch(`/api/clear-readings/${deviceId}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        loadData();
+                    } else {
+                        alert('Failed to clear readings');
+                    }
+                } catch (error) {
+                    console.error('Error clearing readings:', error);
+                    alert('Error clearing readings');
+                }
+            }
+        }
+
+        async function confirmDeleteDevice(deviceId) {
+            if (confirm(`Are you sure you want to completely delete ${deviceId}?\n\nThis will delete:\n- All readings\n- Device alias\n\nThis action cannot be undone!`)) {
+                try {
+                    const response = await fetch(`/api/delete-device/${deviceId}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        loadData();
+                    } else {
+                        alert('Failed to delete device');
+                    }
+                } catch (error) {
+                    console.error('Error deleting device:', error);
+                    alert('Error deleting device');
+                }
+            }
+        }
+
+        loadData();
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
