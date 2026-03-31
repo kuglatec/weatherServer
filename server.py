@@ -55,7 +55,7 @@ def new_device_id():
     existing_ids = [row[0] for row in c.fetchall() if row[0]]
 
     
-    #check exisiting ids to find new 
+    #check exisiting ids to find new
     max_num = 0
     for device_id in existing_ids:
         if device_id.startswith('device-'):
