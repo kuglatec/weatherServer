@@ -8,7 +8,7 @@ DB_PATH = 'sensor_data.db'
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS sensors
+    c.execute('''CREATE TABLE IF NOT EXISTS measurements
                  (id INTEGER PRIMARY KEY, device_id TEXT, temperature REAL, humidity REAL, timestamp TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS device_aliases
                  (device_id TEXT PRIMARY KEY, alias TEXT)''')
@@ -25,10 +25,10 @@ def index():
 def get_sensor_data():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('SELECT device_id, temperature, humidity, timestamp FROM sensors ORDER BY timestamp DESC LIMIT 100')
+    c.execute('SELECT device_id, temperature, humidity, timestamp FROM measurements ORDER BY timestamp DESC LIMIT 100')
     rows = c.fetchall()
 
-    # Get all aliases
+#get device aliases and convert to dict
     c.execute('SELECT device_id, alias FROM device_aliases')
     aliases = dict(c.fetchall())
     conn.close()
@@ -46,6 +46,31 @@ def get_sensor_data():
 
     return flask.jsonify(data)
 
+
+@app.route('/api/new_device_id', methods=['GET'])
+def new_device_id():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT device_id FROM measurements UNION SELECT device_id FROM device_aliases')
+    existing_ids = [row[0] for row in c.fetchall() if row[0]]
+
+    
+    #check exisiting ids to find new 
+    max_num = 0
+    for device_id in existing_ids:
+        if device_id.startswith('device-'):
+            suffix = device_id[7:]
+            if suffix.isdigit():
+                max_num = max(max_num, int(suffix))
+
+    new_id = f'device-{max_num + 1:04d}'
+
+    c.execute('INSERT INTO device_aliases (device_id, alias) VALUES (?, ?)', (new_id, '')) #create device with no diff alias
+    conn.commit()
+    conn.close()
+
+    return flask.jsonify({'device_id': new_id})
+
 @app.route('/api/submit', methods=['POST'])
 def submit_sensor_data():
     data = flask.request.get_json()
@@ -60,12 +85,12 @@ def submit_sensor_data():
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('INSERT INTO sensors (device_id, temperature, humidity, timestamp) VALUES (?, ?, ?, ?)',
+    c.execute('INSERT INTO measurements (device_id, temperature, humidity, timestamp) VALUES (?, ?, ?, ?)',
               (device_id, temperature, humidity, timestamp))
     conn.commit()
     conn.close()
 
-    return flask.jsonify({'status': 'success', 'timestamp': timestamp}), 201
+    return flask.jsonify({'status': 'success'}), 201
 
 @app.route('/api/set-alias', methods=['POST'])
 def set_alias():
@@ -90,7 +115,7 @@ def set_alias():
 def delete_device(device_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('DELETE FROM sensors WHERE device_id = ?', (device_id,))
+    c.execute('DELETE FROM measurements WHERE device_id = ?', (device_id,))
     c.execute('DELETE FROM device_aliases WHERE device_id = ?', (device_id,))
     conn.commit()
     conn.close()
@@ -101,7 +126,7 @@ def delete_device(device_id):
 def clear_readings(device_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('DELETE FROM sensors WHERE device_id = ?', (device_id,))
+    c.execute('DELETE FROM measurements WHERE device_id = ?', (device_id,))
     conn.commit()
     conn.close()
 
