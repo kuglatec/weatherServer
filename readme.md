@@ -1,4 +1,7 @@
 # Wetterstation
+## Stacl
+- Flask
+- SQLite
 ## Endpoints
 ### Submit measurement (POST)
 ```
