@@ -1,5 +1,5 @@
 # Wetterstation
-## Stacl
+## Stack
 - Flask
 - SQLite
 ## Endpoints
