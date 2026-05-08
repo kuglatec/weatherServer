@@ -1,4 +1,4 @@
-# Wetterstation (Schulprojekt
+# Wetterstation (Schulprojekt)
 ## Stack
 - Flask
 - SQLite
